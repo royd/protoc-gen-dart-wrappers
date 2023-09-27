@@ -1,5 +1,7 @@
 ## protoc-gen-dart-wrappers
 
+*Proof-of-concept: Not maintained*
+
 Generates friendly Dart wrappers around Protobuf generated classes.
 1. Validates data
 1. Requires non-optional parameters
