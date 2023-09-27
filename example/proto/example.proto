@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+option go_package = "com.example/example";
+package example;
+
+message MsgOne {
+    string fieldOne = 1;
+    MsgTwo fieldTwo = 2;
+    EnumOne fieldThree = 3;
+    optional string fieldFour = 4;
+}
+
+message MsgTwo {
+    string fieldOne = 1;
+}
+
+enum EnumOne {
+    one = 0;
+    two = 1;
+}
