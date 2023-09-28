@@ -1,3 +1,4 @@
 **/bin/*
 .DS_Store
 protoc-gen-dart-wrappers
+cmd/run_example/run_example
