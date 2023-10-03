@@ -23,7 +23,7 @@ func main() {
 
 	var rootDir string
 	// current dir is different between run and debug
-	if path.Base(dir) == "run_example" {
+	if path.Base(dir) == "gen_example" {
 		rootDir = path.Join(dir, "../../")
 	} else {
 		rootDir = dir
