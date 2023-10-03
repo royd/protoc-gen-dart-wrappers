@@ -29,10 +29,8 @@ func main() {
 		rootDir = dir
 	}
 
-	err = os.Chdir(path.Join(rootDir, "example/proto"))
-	if err != nil {
-		log.Fatal(err)
-	}
+	changeDir(rootDir, "protoc-gen-save-request")
+	execute("go", "build", ".")
 
 	p, ok := os.LookupEnv("PATH")
 	if !ok {
@@ -50,20 +48,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cmd := exec.Command("protoc", "--proto_path=.", "--save-request_out=../bin", "example.proto")
-	out, err := cmd.Output()
-	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if ok {
-			log.Fatal(string(exitErr.Stderr))
-		} else {
-			log.Fatal(err)
-		}
-	}
-
-	if len(out) > 0 {
-		log.Print(string(out))
-	}
+	changeDir(rootDir, "example/proto")
+	execute("protoc", "--proto_path=.", "--save-request_out=../bin", "example.proto")
 
 	log.Print("Saved CodeGeneratorRequest")
 
@@ -85,4 +71,38 @@ func main() {
 	}
 
 	log.Print("Generated finished")
+
+	err = os.Chdir(rootDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	execute("go", "build", ".")
+	execute("./gen_example.sh")
+
+	log.Print("Wrote response")
+}
+
+func changeDir(parts ...string) {
+	err := os.Chdir(path.Join(parts...))
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func execute(name string, args ...string) {
+	cmd := exec.Command(name, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		if ok {
+			log.Fatal(string(exitErr.Stderr))
+		} else {
+			log.Fatal(err)
+		}
+	}
+
+	if len(out) > 0 {
+		log.Print(string(out))
+	}
 }
