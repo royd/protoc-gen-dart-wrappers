@@ -13,6 +13,14 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
+// note: this script runs the generator twice:
+// 1. dry-run to allow debugging
+// 2. generate the files
+//
+// the standard generation process:
+// 1. protoc writes a CodeGeneratorRequest to os.Stdin
+// 2. plugin reads CodeGeneratorRequest and writes CodeGeneratorResponse to os.Stdout
+// 3. protoc reads CodeGeneratorResponse and generates files
 func main() {
 	log.Print("Start example run")
 
