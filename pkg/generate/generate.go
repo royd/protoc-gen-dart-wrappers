@@ -185,13 +185,19 @@ func generateFile(p *protogen.Plugin, f *protogen.File) error {
 		// begin client
 
 		clientName := serviceName + "Client"
-		g.P("class ", clientName, "{")
-		g.P("  ", clientName, "({")
-		g.P("    required pbgrpc.", clientName, " base,")
-		g.P("  }) : _base = base;")
 
+		g.P("class ", clientName, " {")
+		g.P("  ", clientName, "(")
+		g.P("    grpc.ClientChannel channel, {")
+		g.P("    grpc.CallOptions? options,")
+		g.P("    Iterable<grpc.ClientInterceptor>? interceptors,")
+		g.P("  }) : _base = pbgrpc.MsgServiceClient(")
+		g.P("          channel,")
+		g.P("          options: options,")
+		g.P("          interceptors: interceptors,")
+		g.P("    );")
 		g.P("")
-		g.P("final pbgrpc.", clientName, " _base;")
+		g.P("  final pbgrpc.", clientName, " _base;")
 		g.P("")
 
 		for _, m := range s.Methods {
@@ -205,7 +211,7 @@ func generateFile(p *protogen.Plugin, f *protogen.File) error {
 				g.P("      request.toProto(),")
 				g.P("    );")
 				g.P("")
-				writeStreamTransformer(g, m, "    ")
+				writeFromPbStreamTransformer(g, m, "    ")
 				g.P("")
 				g.P("    return response.transform(transformer);")
 				g.P("  }")
@@ -227,13 +233,38 @@ func generateFile(p *protogen.Plugin, f *protogen.File) error {
 
 		// begin service
 
-		g.P("class ", serviceName, "{")
-		g.P("  ", serviceName, "({")
-		g.P("    required pbgrpc.", serviceName, "Base base,")
+		g.P("abstract class ", serviceName, " {")
+		for _, m := range s.Methods {
+			methodName := toMethodName(m)
+			inputClassName := toClassName(m.Input)
+			outputClassName := toClassName(m.Output)
+
+			if m.Desc.IsStreamingServer() {
+				g.P("  Stream<", outputClassName, "> ", methodName, "(")
+				g.P("    grpc.ServiceCall call,")
+				g.P("    ", inputClassName, " request,")
+				g.P("  );")
+			} else {
+				g.P("  Future<", outputClassName, "> ", methodName, "(")
+				g.P("    grpc.ServiceCall call,")
+				g.P("    ", inputClassName, " request,")
+				g.P("  );")
+			}
+			g.P("")
+		}
+
+		g.P("  pbgrpc.", serviceName, "Base toProto() => _", serviceName, "(base: this);")
+		g.P("}")
+
+		g.P("")
+
+		g.P("class _", serviceName, " extends pbgrpc.", serviceName, "Base {")
+		g.P("  _", serviceName, "({")
+		g.P("    required ", serviceName, " base,")
 		g.P("  }) : _base = base;")
 
 		g.P("")
-		g.P("final pbgrpc.", serviceName, "Base _base;")
+		g.P("  final ", serviceName, " _base;")
 		g.P("")
 
 		for _, m := range s.Methods {
@@ -242,34 +273,36 @@ func generateFile(p *protogen.Plugin, f *protogen.File) error {
 			outputClassName := toClassName(m.Output)
 
 			if m.Desc.IsStreamingServer() {
-				g.P("  Stream<", outputClassName, "> ", methodName, "({")
-				g.P("    required grpc.ServiceCall call,")
-				g.P("    required ", inputClassName, " request,")
-				g.P("  }) {")
+				g.P("  @override")
+				g.P("  Stream<pb.", outputClassName, "> ", methodName, "(")
+				g.P("    grpc.ServiceCall call,")
+				g.P("    pb.", inputClassName, " request,")
+				g.P("  ) {")
 				g.P("    final response = _base.", methodName, "(")
 				g.P("      call,")
-				g.P("      request.toProto(),")
+				g.P("      ", inputClassName, ".fromProto(request),")
 				g.P("    );")
 				g.P("")
-				writeStreamTransformer(g, m, "    ")
+				writeToPbStreamTransformer(g, m, "    ")
 				g.P("")
 				g.P("    return response.transform(transformer);")
 				g.P("  }")
 			} else {
-				g.P("  Future<", outputClassName, "> ", methodName, "({")
-				g.P("    required grpc.ServiceCall call,")
-				g.P("    required ", inputClassName, " request,")
-				g.P("  }) async {")
+				g.P("  @override")
+				g.P("  Future<pb.", outputClassName, "> ", methodName, "(")
+				g.P("    grpc.ServiceCall call,")
+				g.P("    pb.", inputClassName, " request,")
+				g.P("  ) async {")
 				if len(m.Output.Fields) != 0 {
 					g.P("    final response = await _base.", methodName, "(")
 				} else {
 					g.P("    await _base.", methodName, "(")
 				}
 				g.P("      call,")
-				g.P("      request.toProto(),")
+				g.P("      ", inputClassName, ".fromProto(request),")
 				g.P("     );")
 				g.P("")
-				g.P("    return ", outputClassName, ".fromProto(response);")
+				g.P("    return response.toProto();")
 				g.P("  }")
 			}
 
@@ -336,7 +369,7 @@ func dartType(f *protogen.Field) (string, error) {
 	return value, err
 }
 
-func writeStreamTransformer(g *protogen.GeneratedFile, m *protogen.Method, indent string) {
+func writeFromPbStreamTransformer(g *protogen.GeneratedFile, m *protogen.Method, indent string) {
 	outputClassName := toClassName(m.Output)
 
 	g.P(indent, "final transformer = StreamTransformer.fromHandlers(")
@@ -344,6 +377,19 @@ func writeStreamTransformer(g *protogen.GeneratedFile, m *protogen.Method, inden
 	g.P(indent, "      (pb.", outputClassName, " data, ", "EventSink<", outputClassName, "> sink) {")
 	g.P(indent, "    sink.add(")
 	g.P(indent, "      ", outputClassName, ".fromProto(data),")
+	g.P(indent, "    );")
+	g.P(indent, "  },")
+	g.P(indent, ");")
+}
+
+func writeToPbStreamTransformer(g *protogen.GeneratedFile, m *protogen.Method, indent string) {
+	outputClassName := toClassName(m.Output)
+
+	g.P(indent, "final transformer = StreamTransformer.fromHandlers(")
+	g.P(indent, "  handleData:")
+	g.P(indent, "      (", outputClassName, " data, ", "EventSink<pb.", outputClassName, "> sink) {")
+	g.P(indent, "    sink.add(")
+	g.P(indent, "      data.toProto(),")
 	g.P(indent, "    );")
 	g.P(indent, "  },")
 	g.P(indent, ");")

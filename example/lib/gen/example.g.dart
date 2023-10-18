@@ -320,26 +320,35 @@ enum EnumOne {
   two;
 
   factory EnumOne.fromProto(pb.EnumOne en) =>
-    EnumOne.values.firstWhere((e) => e.index == en.value);
+      EnumOne.values.firstWhere((e) => e.index == en.value);
 
   pb.EnumOne toProto() => pb.EnumOne.valueOf(this.index)!;
 }
 
-class MsgServiceClient{
-  MsgServiceClient({
-    required pbgrpc.MsgServiceClient base,
-  }) : _base = base;
+class MsgServiceClient {
+  MsgServiceClient(
+    grpc.ClientChannel channel, {
+    grpc.CallOptions? options,
+    Iterable<grpc.ClientInterceptor>? interceptors,
+  }) : _base = pbgrpc.MsgServiceClient(
+          channel,
+          options: options,
+          interceptors: interceptors,
+        );
 
-final pbgrpc.MsgServiceClient _base;
+  final pbgrpc.MsgServiceClient _base;
 
-  Future<GetMsgResponse> getMsg(GetMsgRequest request, {grpc.CallOptions? options}) async {
+  Future<GetMsgResponse> getMsg(GetMsgRequest request,
+      {grpc.CallOptions? options}) async {
     final response = await _base.getMsg(
       request.toProto(),
     );
 
     return GetMsgResponse.fromProto(response);
   }
-  Stream<StreamMsgResponse> streamMsg(StreamMsgRequest request, {grpc.CallOptions? options}) {
+
+  Stream<StreamMsgResponse> streamMsg(StreamMsgRequest request,
+      {grpc.CallOptions? options}) {
     final response = _base.streamMsg(
       request.toProto(),
     );
@@ -357,44 +366,59 @@ final pbgrpc.MsgServiceClient _base;
   }
 }
 
-class MsgService{
-  MsgService({
-    required pbgrpc.MsgServiceBase base,
+abstract class MsgService {
+  Future<GetMsgResponse> getMsg(
+    grpc.ServiceCall call,
+    GetMsgRequest request,
+  );
+
+  Stream<StreamMsgResponse> streamMsg(
+    grpc.ServiceCall call,
+    StreamMsgRequest request,
+  );
+
+  pbgrpc.MsgServiceBase toProto() => _MsgService(base: this);
+}
+
+class _MsgService extends pbgrpc.MsgServiceBase {
+  _MsgService({
+    required MsgService base,
   }) : _base = base;
 
-final pbgrpc.MsgServiceBase _base;
+  final MsgService _base;
 
-  Future<GetMsgResponse> getMsg({
-    required grpc.ServiceCall call,
-    required GetMsgRequest request,
-  }) async {
+  @override
+  Future<pb.GetMsgResponse> getMsg(
+    grpc.ServiceCall call,
+    pb.GetMsgRequest request,
+  ) async {
     final response = await _base.getMsg(
       call,
-      request.toProto(),
-     );
+      GetMsgRequest.fromProto(request),
+    );
 
-    return GetMsgResponse.fromProto(response);
+    return response.toProto();
   }
 
-  Stream<StreamMsgResponse> streamMsg({
-    required grpc.ServiceCall call,
-    required StreamMsgRequest request,
-  }) {
+  @override
+  Stream<pb.StreamMsgResponse> streamMsg(
+    grpc.ServiceCall call,
+    pb.StreamMsgRequest request,
+  ) {
     final response = _base.streamMsg(
       call,
-      request.toProto(),
+      StreamMsgRequest.fromProto(request),
     );
 
     final transformer = StreamTransformer.fromHandlers(
       handleData:
-          (pb.StreamMsgResponse data, EventSink<StreamMsgResponse> sink) {
+          (StreamMsgResponse data, EventSink<pb.StreamMsgResponse> sink) {
         sink.add(
-          StreamMsgResponse.fromProto(data),
+          data.toProto(),
         );
       },
     );
 
     return response.transform(transformer);
   }
-
 }
