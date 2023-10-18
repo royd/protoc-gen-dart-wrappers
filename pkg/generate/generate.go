@@ -3,6 +3,8 @@ package generate
 import (
 	"errors"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -41,7 +43,12 @@ func generateFile(p *protogen.Plugin, f *protogen.File) error {
 	g.P()
 
 	// begin imports
+	g.P("import 'dart:async';")
+	g.P("")
+	g.P("import 'package:fixnum/fixnum.dart' as fixnum;")
 	g.P("import '", filePrefix, ".pb.dart' as pb;")
+	g.P("import '", filePrefix, ".pbgrpc.dart' as pbgrpc;")
+	g.P("import 'package:grpc/grpc.dart' as grpc;")
 	g.P("")
 	// end imports
 
@@ -52,7 +59,11 @@ func generateFile(p *protogen.Plugin, f *protogen.File) error {
 		g.P("class ", className, " {")
 
 		// begin constructor
-		g.P("  ", className, "({")
+		if len(m.Fields) != 0 {
+			g.P("  ", className, "({")
+		} else {
+			g.P("  ", className, "(")
+		}
 
 		for _, f := range m.Fields {
 			fieldName := toFieldName(f)
@@ -62,7 +73,12 @@ func generateFile(p *protogen.Plugin, f *protogen.File) error {
 				g.P("    ", "this.", fieldName, ",")
 			}
 		}
-		g.P("  });")
+
+		if len(m.Fields) != 0 {
+			g.P("  });")
+		} else {
+			g.P("  );")
+		}
 		g.P("")
 		// end constructor
 
@@ -158,6 +174,115 @@ func generateFile(p *protogen.Plugin, f *protogen.File) error {
 
 	// end enums
 
+	if len(f.Services) != 0 {
+		g.P("")
+	}
+
+	// begin services
+	for _, s := range f.Services {
+		serviceName := s.Desc.Name()
+
+		// begin client
+
+		clientName := serviceName + "Client"
+		g.P("class ", clientName, "{")
+		g.P("  ", clientName, "({")
+		g.P("    required pbgrpc.", clientName, " base,")
+		g.P("  }) : _base = base;")
+
+		g.P("")
+		g.P("final pbgrpc.", clientName, " _base;")
+		g.P("")
+
+		for _, m := range s.Methods {
+			methodName := toMethodName(m)
+			inputClassName := toClassName(m.Input)
+			outputClassName := toClassName(m.Output)
+
+			if m.Desc.IsStreamingServer() {
+				g.P("  Stream<", outputClassName, "> ", methodName, "(", inputClassName, " request, {grpc.CallOptions? options}) {")
+				g.P("    final response = _base.", methodName, "(")
+				g.P("      request.toProto(),")
+				g.P("    );")
+				g.P("")
+				writeStreamTransformer(g, m, "    ")
+				g.P("")
+				g.P("    return response.transform(transformer);")
+				g.P("  }")
+			} else {
+				g.P("  Future<", outputClassName, "> ", methodName, "(", inputClassName, " request, {grpc.CallOptions? options}) async {")
+				g.P("    final response = await _base.", methodName, "(")
+				g.P("      request.toProto(),")
+				g.P("    );")
+				g.P("")
+				g.P("    return ", outputClassName, ".fromProto(response);")
+				g.P("  }")
+			}
+		}
+
+		g.P("}")
+		g.P("")
+
+		// end client
+
+		// begin service
+
+		g.P("class ", serviceName, "{")
+		g.P("  ", serviceName, "({")
+		g.P("    required pbgrpc.", serviceName, "Base base,")
+		g.P("  }) : _base = base;")
+
+		g.P("")
+		g.P("final pbgrpc.", serviceName, "Base _base;")
+		g.P("")
+
+		for _, m := range s.Methods {
+			methodName := toMethodName(m)
+			inputClassName := toClassName(m.Input)
+			outputClassName := toClassName(m.Output)
+
+			if m.Desc.IsStreamingServer() {
+				g.P("  Stream<", outputClassName, "> ", methodName, "({")
+				g.P("    required grpc.ServiceCall call,")
+				g.P("    required ", inputClassName, " request,")
+				g.P("  }) {")
+				g.P("    final response = _base.", methodName, "(")
+				g.P("      call,")
+				g.P("      request.toProto(),")
+				g.P("    );")
+				g.P("")
+				writeStreamTransformer(g, m, "    ")
+				g.P("")
+				g.P("    return response.transform(transformer);")
+				g.P("  }")
+			} else {
+				g.P("  Future<", outputClassName, "> ", methodName, "({")
+				g.P("    required grpc.ServiceCall call,")
+				g.P("    required ", inputClassName, " request,")
+				g.P("  }) async {")
+				if len(m.Output.Fields) != 0 {
+					g.P("    final response = await _base.", methodName, "(")
+				} else {
+					g.P("    await _base.", methodName, "(")
+				}
+				g.P("      call,")
+				g.P("      request.toProto(),")
+				g.P("     );")
+				g.P("")
+				g.P("    return ", outputClassName, ".fromProto(response);")
+				g.P("  }")
+			}
+
+			g.P("")
+		}
+
+		g.P("}")
+
+		// end service
+	}
+
+	// end services
+
 	return nil
 }
 
@@ -168,17 +293,60 @@ func dartType(f *protogen.Field) (string, error) {
 	var err error
 
 	switch kind {
+	case protoreflect.DoubleKind:
+		value = "double"
+	case protoreflect.FloatKind:
+		value = "double"
+	case protoreflect.Int32Kind:
+		value = "int"
+	case protoreflect.Uint32Kind:
+		value = "int"
+	case protoreflect.Sint32Kind:
+		value = "int"
+	case protoreflect.Fixed32Kind:
+		value = "int"
+	case protoreflect.Sfixed32Kind:
+		value = "int"
+	case protoreflect.Int64Kind:
+		value = "fixnum.Int64"
+	case protoreflect.Uint64Kind:
+		value = "fixnum.Int64"
+	case protoreflect.Sint64Kind:
+		value = "fixnum.Int64"
+	case protoreflect.Fixed64Kind:
+		value = "fixnum.Int64"
+	case protoreflect.Sfixed64Kind:
+		value = "fixnum.Int64"
+	case protoreflect.BoolKind:
+		value = "bool"
 	case protoreflect.StringKind:
 		value = "String"
+	case protoreflect.BytesKind:
+		value = "List<int>"
 	case protoreflect.MessageKind:
 		value = toClassName(f.Message)
 	case protoreflect.EnumKind:
 		value = toEnumName(f.Enum)
+	case protoreflect.GroupKind:
+		err = errors.New("unsupported type " + kind.String())
 	default:
 		err = errors.New("unsupported type " + kind.String())
 	}
 
 	return value, err
+}
+
+func writeStreamTransformer(g *protogen.GeneratedFile, m *protogen.Method, indent string) {
+	outputClassName := toClassName(m.Output)
+
+	g.P(indent, "final transformer = StreamTransformer.fromHandlers(")
+	g.P(indent, "  handleData:")
+	g.P(indent, "      (pb.", outputClassName, " data, ", "EventSink<", outputClassName, "> sink) {")
+	g.P(indent, "    sink.add(")
+	g.P(indent, "      ", outputClassName, ".fromProto(data),")
+	g.P(indent, "    );")
+	g.P(indent, "  },")
+	g.P(indent, ");")
 }
 
 func isRequired(f *protogen.Field) bool {
@@ -197,6 +365,14 @@ func toTitleCase(str string) string {
 	caser := cases.Title(language.English)
 
 	return caser.String(str)
+}
+
+func toMethodName(m *protogen.Method) string {
+	name := string(m.Desc.Name())
+
+	r, n := utf8.DecodeRuneInString(name)
+
+	return string(unicode.ToLower(r)) + name[n:]
 }
 
 func toClassName(m *protogen.Message) string {

@@ -3,6 +3,24 @@ syntax = "proto3";
 option go_package = "com.example/example";
 package example;
 
+message MsgValueTypes {
+    double doubleType = 1;      // double
+    float floatType = 2;        // double
+    int32 int32Type = 3;        // int
+    int64 int64Type = 4;        // Int64
+    uint32 uint32Type = 5;      // int
+    uint64 uint64Type = 6;      // Int64
+    sint32 sint32Type = 7;      // int
+    sint64 sint64Type = 8;      // Int64
+    fixed32 fixed32Type = 9;    // int
+    fixed64 fixed64Type = 10;   // Int64
+    sfixed32 sfixed32Type = 11; // Int64
+    sfixed64 sfixed64Type = 12; // Int64
+    bool boolType = 13;         // bool
+    string stringType = 14;     // string
+    bytes bytesType = 15;       // List
+}
+
 message MsgOne {
     string fieldOne = 1;
     MsgTwo fieldTwo = 2;
@@ -17,4 +35,26 @@ message MsgTwo {
 enum EnumOne {
     one = 0;
     two = 1;
+}
+
+message GetMsgRequest {
+    int32 arg = 1;
+}
+
+message GetMsgResponse {
+    int32 arg = 1;
+}
+
+message StreamMsgRequest {
+    int32 arg = 1;
+    EnumOne enumArg = 2;
+}
+
+message StreamMsgResponse {
+    int32 arg = 1;
+}
+
+service MsgService {
+    rpc GetMsg(GetMsgRequest) returns (GetMsgResponse);
+    rpc StreamMsg(StreamMsgRequest) returns (stream StreamMsgResponse);
 }

@@ -44,3 +44,14 @@ class Msg {
   }
 }
 ```
+
+### Generating wrappers for example.proto
+Install the [protoc_plugin](https://pub.dev/packages/protoc_plugin)
+```
+dart pub global activate protoc_plugin
+```
+
+Run the generator
+```
+./gen_example.sh
+```
